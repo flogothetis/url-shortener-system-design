@@ -7,7 +7,7 @@ services:
     build: ./id-generator
     environment:
       WORKER_ID: 1
-      EPOCH: 1641052800000
+      EPOCH: 1641052800000 #start date of timestamps
     ports:
       - 5000
     networks:
@@ -17,7 +17,7 @@ services:
     build: ./id-generator
     environment:
       WORKER_ID: 2
-      EPOCH: 1641052800000
+      EPOCH: 1641052800000 #start date of timestamps
     ports:
       - 5000
     networks:
@@ -41,7 +41,7 @@ services:
     depends_on:
       - mongodb
     environment:
-      - MONGO_HOST=mongo
+      - MONGO_HOST=mongodb://mongodb:27017/
     networks:
       - snowflake-net
 
@@ -60,8 +60,6 @@ services:
     ports:
       - 8081:8081
     environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: root
-      ME_CONFIG_MONGODB_ADMINPASSWORD: example
       ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
     networks:
       - snowflake-net

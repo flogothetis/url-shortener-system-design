@@ -8,13 +8,14 @@ import (
 	"os"
 	"time"
 
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
-	"log/slog"
-	"github.com/google/uuid"
 )
 
 // URL model
@@ -25,46 +26,42 @@ type URL struct {
 	CreatedAt   time.Time `json:"createdAt" bson:"createdAt"`
 }
 
+//TODO:: Add cache (MEMCACHE - READ HEAVY)
 
 func main() {
-	opts := &slog.HandlerOptions{
-        Level: slog.LevelDebug,
-    }
 
-    handler := slog.NewJSONHandler(os.Stdout, opts)
-
-    logger := slog.New(handler)
+	logger := slog.Default()
 	r := gin.Default()
 
 	// Read MongoDB host from environment variable
 	mongoHost := os.Getenv("MONGO_HOST")
 	if mongoHost == "" {
-		logger.Info("MONGO_HOST environment variable not set")
+		logger.Error("MONGO_HOST environment variable not set")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // Change the duration as needed
 
 	mongoClient, err := mongo.Connect(
-	 ctx,
-	 options.Client().ApplyURI("mongodb://mongodb:27017/"),
+		ctx,
+		options.Client().ApplyURI(mongoHost),
 	)
-   
+
 	defer func() {
-	 cancel()
-	 if err := mongoClient.Disconnect(ctx); err != nil {
-		logger.Info("mongodb disconnect error : %v", err)
-	 }
+		cancel()
+		if err := mongoClient.Disconnect(ctx); err != nil {
+			logger.Error("mongodb disconnect error : %v", err)
+		}
 	}()
-   
+
 	if err != nil {
-		logger.Info("connection error :%v", err)
-	 return
+		logger.Error("connection error :%v", err)
+		return
 	}
-   
+
 	err = mongoClient.Ping(ctx, readpref.Primary())
 	if err != nil {
-		logger.Info("ping mongodb error :%v", err)
-	 return
+		logger.Error("ping mongodb error :%v", err)
+		return
 	}
 	logger.Warn("ping success")
 
@@ -82,7 +79,10 @@ func main() {
 			return
 		}
 
-		// Generate short ID using base64 encoding of UUID
+		//TODO : call id-generator-load-balancer/getTime to fetch a unique time based id
+		//TODO : convert id to base58
+		//TODO : Add load-balancer in from of 3 replicas of this app
+
 		shortID := base64.URLEncoding.EncodeToString([]byte(uuid.New().String())[:12])
 
 		shortURL := fmt.Sprintf("%s/%s", c.Request.Host, shortID)
@@ -94,13 +94,12 @@ func main() {
 			ShortURL:    shortURL,
 			CreatedAt:   time.Now(),
 		}
-		ctx, _ := context.WithTimeout(context.Background(), 30*time.Second) // Change the duration as needed
-
+		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 		_, err := urlCollection.InsertOne(ctx, urlEntry)
 		if err != nil {
 			logger.Info("Failed to insert into MongoDB: %v\n", err)
-		   c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to shorten URL"})
-		   return
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to shorten URL"})
+			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{"shortUrl": shortURL})
@@ -112,6 +111,8 @@ func main() {
 		var urlEntry URL
 
 		// Find URL in MongoDB
+		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+
 		err := urlCollection.FindOne(ctx, bson.M{"_id": shortID}).Decode(&urlEntry)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
@@ -123,6 +124,7 @@ func main() {
 
 	// Run the server
 	if err := r.Run(":3000"); err != nil {
-		//slog.Info(err)
+		slog.Info(err.Error())
 	}
+
 }
