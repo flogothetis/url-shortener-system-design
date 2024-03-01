@@ -10,7 +10,7 @@ RUN go mod download
 
 COPY *.go ./
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /docker-gs-ping
+RUN GOOS=linux go build -o /docker-gs-ping
 
 # Run the tests in the container
 FROM build-stage AS run-test-stage
@@ -23,7 +23,7 @@ WORKDIR /
 
 COPY --from=build-stage /docker-gs-ping /docker-gs-ping
 
-EXPOSE 3000
+EXPOSE 3001
 
 USER nonroot:nonroot
 
