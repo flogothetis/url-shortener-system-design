@@ -2,16 +2,16 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
-	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"time"
 
 	"log/slog"
 
+	"encoding/json"
+
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -22,11 +22,29 @@ import (
 type URL struct {
 	ID          string    `json:"id" bson:"_id"`
 	OriginalURL string    `json:"originalUrl" bson:"originalUrl" binding:"required,url"`
-	ShortURL    string    `json:"shortUrl" bson:"shortUrl"`
 	CreatedAt   time.Time `json:"createdAt" bson:"createdAt"`
 }
 
 //TODO:: Add cache (MEMCACHE - READ HEAVY)
+
+var (
+	base58Alphabet = []byte("123456789ABCDEFJKLMGHNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+)
+
+func base58Encode(input int64) string {
+	x := big.NewInt(input)
+	base := big.NewInt(58)
+	zero := big.NewInt(0)
+	encoded := make([]byte, 0, 11) // log58(2^64) ~= 11
+
+	for x.Cmp(zero) > 0 {
+		mod := new(big.Int)
+		x.DivMod(x, base, mod)
+		encoded = append([]byte{base58Alphabet[mod.Int64()]}, encoded...)
+	}
+
+	return string(encoded)
+}
 
 func main() {
 
@@ -79,23 +97,34 @@ func main() {
 			return
 		}
 
-		//TODO : call id-generator-load-balancer/getTime to fetch a unique time based id
-		//TODO : convert id to base58
-		//TODO : Add load-balancer in from of 3 replicas of this app
+		// Call id-generator-load-balancer/getTime to fetch a unique time-based ID
+		idResp, err := http.Get("http://load-balancer-id-generators/getTime")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer idResp.Body.Close()
 
-		shortID := base64.URLEncoding.EncodeToString([]byte(uuid.New().String())[:12])
+		var idResponse map[string]int64
+		if err := json.NewDecoder(idResp.Body).Decode(&idResponse); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode ID response"})
+			return
+		}
 
-		shortURL := fmt.Sprintf("%s/%s", c.Request.Host, shortID)
+		timeID := idResponse["time"]
+
+		// Convert ID to base58
+		shortURL := base58Encode(timeID)
 
 		// Create URL entry
 		urlEntry := URL{
-			ID:          shortID,
+			ID:          shortURL,
 			OriginalURL: input.OriginalURL,
-			ShortURL:    shortURL,
 			CreatedAt:   time.Now(),
 		}
+
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		_, err := urlCollection.InsertOne(ctx, urlEntry)
+		_, err = urlCollection.InsertOne(ctx, urlEntry)
 		if err != nil {
 			logger.Info("Failed to insert into MongoDB: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to shorten URL"})
