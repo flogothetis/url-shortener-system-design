@@ -8,7 +8,9 @@ jobs:
       - checkout
       - run:
           name: Run tests
-          command: go test ./id-generator
+          command:  |
+            cd id-generator
+            go test
 
 workflows:
   version: 2
