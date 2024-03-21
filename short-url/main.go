@@ -3,15 +3,13 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
-	"io"
-
-	"log/slog"
-
-	"github.com/gin-gonic/gin"
 	// "github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -80,28 +78,32 @@ func main() {
 			return
 		}
 
-		//TODO : call id-generator-load-balancer/getTime to fetch a unique time based id
 		//TODO : convert id to base58
 		//TODO : Add load-balancer in from of 3 replicas of this app
 
-
 		// Call id-generator-load-balancer/getTime to fetch a unique time-based ID
-		resp, err := http.Get("http://load-balancer-id-generators:8080/getTime")
+		idResp, err := http.Get("http://load-balancer-id-generators/getTime")
+
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": error.Error})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		defer resp.Body.Close()
-		body, err1 := io.ReadAll(resp.Body)
-		
-		if err1 != nil {
+		defer idResp.Body.Close()
+
+		var idResponse map[string]int64
+		if err := json.NewDecoder(idResp.Body).Decode(&idResponse); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode ID response"})
+			return
+		}
+
+		timeID := idResponse["time"]
+
+		if err != nil {
 			logger.Error("Error on fetching ")
 			return
 		}
-		// Convert the response body (time-based ID) to base58
-		shortID := base64.StdEncoding.EncodeToString([]byte(body))
 
-		// shortID := base64.URLEncoding.EncodeToString([]byte(uuid.New().String())[:12])
+		shortID := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("%d", timeID))[:12])
 
 		shortURL := fmt.Sprintf("%s/%s", c.Request.Host, shortID)
 
@@ -113,9 +115,8 @@ func main() {
 			CreatedAt:   time.Now(),
 		}
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		ok, err := urlCollection.InsertOne(ctx, urlEntry)
+		_, err = urlCollection.InsertOne(ctx, urlEntry)
 
-		fmt.Println(ok);
 		if err != nil {
 			logger.Info("Failed to insert into MongoDB: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to shorten URL"})

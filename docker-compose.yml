@@ -23,25 +23,27 @@ services:
     networks:
       - snowflake-net
 
-  load-balancer-id-generators:
-    image: nginx
-    volumes:
-      - ./id-generator-load-balancer/nginx.conf:/etc/nginx/nginx.conf
-    ports:
-      - "8080:80"
-    networks:
-      - snowflake-net
-
   short-url-app:
     build:
       context: ./short-url
     ports:
-      - "3001:3001"
+      - "3001"
     depends_on:
       - mongodb
       - cache-container
     environment:
       MONGO_HOST: mongodb://mongodb:27017/
+    networks:
+      - snowflake-net
+    deploy:
+      replicas: 3
+
+  short-url-load-balancer:
+    image: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./short-url-load-balancer/nginx.conf:/etc/nginx/nginx.conf
     networks:
       - snowflake-net
 
