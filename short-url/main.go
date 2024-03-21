@@ -86,13 +86,14 @@ func main() {
 
 
 		// Call id-generator-load-balancer/getTime to fetch a unique time-based ID
-		resp, err := http.Get("http://localhost:8080/getTime")
+		resp, err := http.Get("http://load-balancer-id-generators:8080/getTime")
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch unique ID"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": error.Error})
 			return
 		}
 		defer resp.Body.Close()
 		body, err1 := io.ReadAll(resp.Body)
+		
 		if err1 != nil {
 			logger.Error("Error on fetching ")
 			return
@@ -142,7 +143,7 @@ func main() {
 	})
 
 	// Run the server
-	if err := r.Run(":3000"); err != nil {
+	if err := r.Run(":3001"); err != nil {
 		slog.Info(err.Error())
 	}
 

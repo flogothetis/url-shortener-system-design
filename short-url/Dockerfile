@@ -10,14 +10,15 @@ RUN go mod download
 
 COPY *.go ./
 
-RUN GOOS=linux go build -o /docker-gs-ping
+RUN CGO_ENABLED=0 GOOS=linux go build -o /docker-gs-ping
+# RUN GOOS=linux go build -o /docker-gs-ping
 
 # Run the tests in the container
 FROM build-stage AS run-test-stage
 RUN go test -v ./...
 
 # Deploy the application binary into a lean image
-FROM gcr.io/distroless/base-debian11 AS build-release-stage
+FROM alpine:latest AS build-release-stage
 
 WORKDIR /
 
@@ -25,6 +26,6 @@ COPY --from=build-stage /docker-gs-ping /docker-gs-ping
 
 EXPOSE 3001
 
-USER nonroot:nonroot
+USER nobody:nobody
 
 ENTRYPOINT ["/docker-gs-ping"]

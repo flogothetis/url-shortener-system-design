@@ -9,7 +9,7 @@ services:
       WORKER_ID: 1
       EPOCH: 1641052800000 #start date of timestamps
     ports:
-      - 5001
+      - "5002:5001"
     networks:
       - snowflake-net
 
@@ -19,7 +19,7 @@ services:
       WORKER_ID: 2
       EPOCH: 1641052800000 #start date of timestamps
     ports:
-      - 5001
+      - "5003:5001"
     networks:
       - snowflake-net
 
@@ -41,7 +41,7 @@ services:
       - mongodb
       - cache-container
     environment:
-      - MONGO_HOST=mongodb://mongodb:27017/
+      MONGO_HOST: mongodb://mongodb:27017/
     networks:
       - snowflake-net
 
