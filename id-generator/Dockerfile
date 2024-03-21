@@ -9,6 +9,7 @@ RUN go mod download
 
 COPY *.go ./
 
+# EXPOSE 5001
 
 RUN go build -o app
 

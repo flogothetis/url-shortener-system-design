@@ -2,16 +2,16 @@ package main
 
 import (
 	"context"
-	"math/big"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
 
 	"log/slog"
 
-	"encoding/json"
-
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -97,24 +97,13 @@ func main() {
 			return
 		}
 
-		// Call id-generator-load-balancer/getTime to fetch a unique time-based ID
-		idResp, err := http.Get("http://load-balancer-id-generators/getTime")
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		defer idResp.Body.Close()
+		//TODO : call id-generator-load-balancer/getTime to fetch a unique time based id
+		//TODO : convert id to base58
+		//TODO : Add load-balancer in from of 3 replicas of this app
 
-		var idResponse map[string]int64
-		if err := json.NewDecoder(idResp.Body).Decode(&idResponse); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode ID response"})
-			return
-		}
+		shortID := base64.URLEncoding.EncodeToString([]byte(uuid.New().String())[:12])
 
-		timeID := idResponse["time"]
-
-		// Convert ID to base58
-		shortURL := base58Encode(timeID)
+		shortURL := fmt.Sprintf("%s/%s", c.Request.Host, shortID)
 
 		// Create URL entry
 		urlEntry := URL{
@@ -124,7 +113,7 @@ func main() {
 		}
 
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		_, err = urlCollection.InsertOne(ctx, urlEntry)
+		_, err := urlCollection.InsertOne(ctx, urlEntry)
 		if err != nil {
 			logger.Info("Failed to insert into MongoDB: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to shorten URL"})
@@ -152,7 +141,7 @@ func main() {
 	})
 
 	// Run the server
-	if err := r.Run(":3000"); err != nil {
+	if err := r.Run(":3001"); err != nil {
 		slog.Info(err.Error())
 	}
 

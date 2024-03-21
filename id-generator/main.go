@@ -112,10 +112,10 @@ func main() {
 
 	// Start HTTP server
 	server := &http.Server{
-		Addr:    ":5000",
+		Addr:    ":5001",
 		Handler: r,
 	}
 
-	fmt.Printf("Server with Worker ID %d and Epoch %d is running on :5000\n", workerID, epoch)
+	fmt.Printf("Server with Worker ID %d and Epoch %d is running on :5001\n", workerID, epoch)
 	server.ListenAndServe()
 }
