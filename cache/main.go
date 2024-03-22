@@ -1,60 +1,91 @@
 package main
 
 import (
-    "encoding/json"
-    "log"
-    "net/http"
-
-    "github.com/bradfitz/gomemcache/memcache"
-    "github.com/gorilla/mux"
+	"github.com/bradfitz/gomemcache/memcache"
+	"github.com/gin-gonic/gin"
+	"log"
+	"net/http"
+	"os"
 )
 
-var cache *memcache.Client
-
-func init() {
-    cache = memcache.New(ME_CONFIG_MEMCACHE_URL)
-}
-
-func getFromCacheHandler(w http.ResponseWriter, r *http.Request) {
-    params := mux.Vars(r)
-    key := params["key"]
-
-    item, err := cache.Get(key)
-    if err != nil {
-        http.Error(w, "Key not found", http.StatusNotFound)
-        return
-    }
-
-    response := map[string]string{key: string(item.Value)}
-    json.NewEncoder(w).Encode(response)
-}
-
-func setToCacheHandler(w http.ResponseWriter, r *http.Request) {
-    var data map[string]string
-    err := json.NewDecoder(r.Body).Decode(&data)
-    if err != nil {
-        http.Error(w, "Invalid JSON data", http.StatusBadRequest)
-        return
-    }
-
-    key := data["key"]
-    value := data["value"]
-
-    err = cache.Set(&memcache.Item{Key: key, Value: []byte(value)})
-    if err != nil {
-        http.Error(w, "Failed to set value to cache", http.StatusInternalServerError)
-        return
-    }
-
-    response := map[string]bool{"success": true}
-    json.NewEncoder(w).Encode(response)
-}
-
 func main() {
-    router := mux.NewRouter()
+	r := gin.Default()
 
-    router.HandleFunc("/get/{key}", getFromCacheHandler).Methods("GET")
-    router.HandleFunc("/set", setToCacheHandler).Methods("POST")
+	// Initialize Memcached client
+	memcachedClient := memcache.New(os.Getenv("ME_CONFIG_MEMCACHE_URL"))
+	// r.GET("/getAll", func(c *gin.Context) {
+	// 	keys, err := memcachedClient.FlushAll() // Passing empty string fetches all items
+	// 	if err != nil {
+	// 		log.Printf("Error getting all key-value pairs from Memcached: %v\n", err)
+	// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// 		return
+	// 	}
 
-    log.Fatal(http.ListenAndServe(":8080", router))
+	// 	var keyValues []gin.H
+	// 	for _, key := range keys {
+	// 		item, err := memcachedClient.Get(key)
+	// 		if err != nil {
+	// 			log.Printf("Error getting item with key %s from Memcached: %v\n", key, err)
+	// 			continue
+	// 		}
+	// 		keyValues = append(keyValues, gin.H{"key": key, "value": string(item.Value)})
+	// 	}
+	// 	log.Printf("Retrieved all key-value pairs from Memcached: %v\n", keyValues)
+	// 	c.JSON(http.StatusOK, keyValues)
+	// })
+
+	r.GET("/get/:key", func(c *gin.Context) {
+		key := c.Param("key")
+		item, err := memcachedClient.Get(key)
+		if err != nil {
+			log.Printf("Error getting value for key %s from Memcached: %v\n", key, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		log.Printf("Retrieved value for key %s from Memcached: %s\n", key, string(item.Value))
+		c.JSON(http.StatusOK, gin.H{"value": string(item.Value)})
+	})
+
+	r.POST("/set", func(c *gin.Context) {
+		var data struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		}
+		if err := c.ShouldBindJSON(&data); err != nil {
+
+			log.Printf("Error binding JSON data: %v\n", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		item := &memcache.Item{
+			Key:   data.Key,
+			Value: []byte(data.Value),
+		}
+
+		if err := memcachedClient.Set(item); err != nil {
+			log.Printf("Error setting value for key %s in Memcached: %v\n", data.Key, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		log.Printf("Set value for key %s in Memcached successfully\n", data.Key)
+		c.JSON(http.StatusOK, gin.H{"message": "Value set successfully"})
+	})
+
+	// r.DELETE("/delete/:key", func(c *gin.Context) {
+	//     key := c.Param("key")
+	//     if err := memcachedClient.Delete(key); err != nil {
+	//         c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	//         return
+	//     }
+	//     c.JSON(http.StatusOK, gin.H{"message": "Key deleted successfully"})
+	// })
+
+	port := os.Getenv("CACHE_API_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	if err := r.Run(":" + port); err != nil {
+		log.Fatal(err)
+	}
 }

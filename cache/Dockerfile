@@ -1,8 +1,19 @@
-# Use the official Memcached image as base
-FROM memcached:latest
+FROM golang:1.18
 
-# Expose the default Memcached port
-EXPOSE 11211
+WORKDIR /app
 
-# Set default memory limit for Memcached (optional)
-CMD ["-m", "64"]
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY *.go ./
+
+# EXPOSE 5001
+
+RUN go build -o app
+
+CMD ["./app"]

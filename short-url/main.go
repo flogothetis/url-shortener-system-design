@@ -1,17 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
-	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"time"
 
 	"log/slog"
 
+	"encoding/json"
+
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -28,7 +29,8 @@ type URL struct {
 //TODO:: Add cache (MEMCACHE - READ HEAVY)
 
 var (
-	base58Alphabet = []byte("123456789ABCDEFJKLMGHNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+	base58Alphabet    = []byte("123456789ABCDEFJKLMGHNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+	cacheContainerURL = "http://cache-load-balancer/"
 )
 
 func base58Encode(input int64) string {
@@ -97,13 +99,24 @@ func main() {
 			return
 		}
 
-		//TODO : call id-generator-load-balancer/getTime to fetch a unique time based id
-		//TODO : convert id to base58
-		//TODO : Add load-balancer in from of 3 replicas of this app
+		// Call id-generator-load-balancer/getTime to fetch a unique time-based ID
+		idResp, err := http.Get("http://load-balancer-id-generators/getTime")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer idResp.Body.Close()
 
-		shortID := base64.URLEncoding.EncodeToString([]byte(uuid.New().String())[:12])
+		var idResponse map[string]int64
+		if err := json.NewDecoder(idResp.Body).Decode(&idResponse); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode ID response"})
+			return
+		}
 
-		shortURL := fmt.Sprintf("%s/%s", c.Request.Host, shortID)
+		timeID := idResponse["time"]
+
+		// Convert ID to base58
+		shortURL := base58Encode(timeID)
 
 		// Create URL entry
 		urlEntry := URL{
@@ -113,25 +126,48 @@ func main() {
 		}
 
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		_, err := urlCollection.InsertOne(ctx, urlEntry)
+		_, err = urlCollection.InsertOne(ctx, urlEntry)
 		if err != nil {
 			logger.Info("Failed to insert into MongoDB: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to shorten URL"})
 			return
 		}
 
+		// Save to Cache
+
+		cacheData := map[string]string{"shortURL": shortURL, "originalURL": input.OriginalURL}
+		cacheBytes, _ := json.Marshal(cacheData)
+		cacheResponse, err := http.Post(cacheContainerURL+"set", "application/json", bytes.NewBuffer(cacheBytes))
+		logger.Debug("%v", cacheResponse)
+		if err != nil {
+			logger.Error("Failed to save to cache container: %v\n", err)
+			// Handle error
+		}
+
 		c.JSON(http.StatusOK, gin.H{"shortUrl": shortURL})
+
 	})
 
 	r.GET("/:shortID", func(c *gin.Context) {
 		shortID := c.Param("shortID")
+
+		resp, err := http.Get(cacheContainerURL + shortID)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			var cacheData map[string]string
+			err := json.NewDecoder(resp.Body).Decode(&cacheData)
+			if err == nil {
+				// Original URL found in cache
+				c.Redirect(http.StatusTemporaryRedirect, cacheData["originalURL"])
+				return
+			}
+		}
 
 		var urlEntry URL
 
 		// Find URL in MongoDB
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
-		err := urlCollection.FindOne(ctx, bson.M{"_id": shortID}).Decode(&urlEntry)
+		err = urlCollection.FindOne(ctx, bson.M{"_id": shortID}).Decode(&urlEntry)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
 			return
