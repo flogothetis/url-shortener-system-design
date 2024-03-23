@@ -11,7 +11,7 @@ import (
 func main() {
 	r := gin.Default()
 
-	// Initialize Memcached client
+	
 	memcachedClient := memcache.New(os.Getenv("ME_CONFIG_MEMCACHE_URL"))
 	// r.GET("/getAll", func(c *gin.Context) {
 	// 	keys, err := memcachedClient.FlushAll() // Passing empty string fetches all items
