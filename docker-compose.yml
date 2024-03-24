@@ -77,5 +77,37 @@ services:
       - snowflake-net
     depends_on:
       - mongodb
+
+  memcached:
+    image: memcached:latest
+    container_name: memcached
+    ports:
+      - "11211:11211"
+    networks:
+      - snowflake-net
+
+  memcached_http_server:
+    build:
+      context: ./cache-http-client
+    ports:
+      - "8080"
+    depends_on:
+      - memcached
+    networks:
+      - snowflake-net
+    deploy:
+      replicas: 3
+
+  memcached_http_server-load-balancer:
+    image: nginx
+    ports:
+      - "80"
+    volumes:
+      - ./cache-http-client-load-balancer/nginx.conf:/etc/nginx/nginx.conf
+    networks:
+      - snowflake-net
+    depends_on:
+      - memcached_http_server
+
 networks:
   snowflake-net:
