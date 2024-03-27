@@ -51,6 +51,8 @@ services:
     image: nginx
     ports:
       - "8080:80"
+    depends_on:
+      - short-url-app
     volumes:
       - ./short-url-load-balancer/nginx.conf:/etc/nginx/nginx.conf
     networks:
@@ -89,14 +91,20 @@ services:
   cache-container:
     build:
       context: ./cache
-    image: memcached
     ports:
-      - "11211:11211"
+      - "11000"
+    depends_on:
+      - memcached
     environment:
-      ME_CONFIG_MEMCACHE_URL: localhost:11211
-      CACHE_API_PORT: 11211
+      - ME_CONFIG_MEMCACHE_URL=memcached:11211
+      - CACHE_API_PORT=11000
     networks:
       - snowflake-net
 
+  memcached:
+    image: arm64v8/memcached:1.6-alpine
+    container_name: memcached
+    ports:
+      - "11211:11211"
 networks:
   snowflake-net:
