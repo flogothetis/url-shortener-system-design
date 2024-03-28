@@ -51,7 +51,7 @@ services:
     image: nginx
     ports:
       - "8080:80"
-    depends_on: 
+    depends_on:
       - short-url-app
     volumes:
       - ./short-url-load-balancer/nginx.conf:/etc/nginx/nginx.conf
@@ -109,6 +109,16 @@ services:
       - snowflake-net
     depends_on:
       - memcached_http_server
+
+    # React Frontend Microservice
+  react-app:
+    image: nginx
+    volumes:
+      - ./react-app/url-shortener/build:/usr/share/nginx/html
+    ports:
+      - "3000:80"  # Expose React app on port 3000
+    networks:
+      - snowflake-net
 
 networks:
   snowflake-net:

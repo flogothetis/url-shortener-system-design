@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"github.com/gin-contrib/cors"
 
 	"encoding/json"
 
@@ -100,6 +101,8 @@ func setValueInCache(key, value string) error {
 func main() {
 
 	r := gin.Default()
+
+	r.Use(cors.Default())
 
 	// Read MongoDB host from environment variable
 	mongoHost := os.Getenv("MONGO_HOST")
@@ -211,7 +214,7 @@ func main() {
 	})
 
 	// Run the server
-	if err := r.Run(":3000"); err != nil {
+	if err := r.Run(":3001"); err != nil {
 		slog.Info(err.Error())
 	}
 
