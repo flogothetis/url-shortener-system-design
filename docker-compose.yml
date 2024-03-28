@@ -57,8 +57,6 @@ services:
       - ./short-url-load-balancer/nginx.conf:/etc/nginx/nginx.conf
     networks:
       - snowflake-net
-    depends_on:
-      - short-url-app
 
   mongodb:
     image: mongo
