@@ -51,6 +51,8 @@ services:
     image: nginx
     ports:
       - "8080:80"
+    depends_on: 
+      - short-url-app
     volumes:
       - ./short-url-load-balancer/nginx.conf:/etc/nginx/nginx.conf
     networks:

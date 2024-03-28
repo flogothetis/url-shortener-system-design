@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"os"
 	"time"
-
-	"log/slog"
 
 	"encoding/json"
 
@@ -18,6 +18,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
+
+var logger = slog.Default()
 
 // URL model
 type URL struct {
@@ -29,7 +31,7 @@ type URL struct {
 //TODO:: Add cache (MEMCACHE - READ HEAVY)
 
 var (
-	base58Alphabet    = []byte("123456789ABCDEFJKLMGHNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+	base58Alphabet = []byte("123456789ABCDEFJKLMGHNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 )
 
 func base58Encode(input int64) string {
@@ -46,10 +48,57 @@ func base58Encode(input int64) string {
 
 	return string(encoded)
 }
+func getUrlFromCache(shortURL string) (bool, string) {
+	// Make a GET request to the endpoint responsible for checking short URL existence
+	resp, err := http.Get("http://memcached_http_server-load-balancer/?key=" + shortURL)
+	if err != nil {
+		return false, "Get request to cache failed"
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, "Status not OK"
+	}
+
+	// Read the response body
+	var response map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return false, "Failed to decode cache response"
+	}
+	value, ok := response[shortURL]
+	if !ok {
+		return false, "Cache response is invalid"
+	}
+	return true, value
+}
+
+func setValueInCache(key, value string) error {
+	// Prepare JSON payload
+	payload := map[string]string{
+		"key":   key,
+		"value": value,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	// Make a POST request to the cache server endpoint
+	resp, err := http.Post("http://memcached_http_server-load-balancer/", "application/json", bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("failed to set value in cache: " + resp.Status)
+	}
+
+	return nil
+}
 
 func main() {
 
-	logger := slog.Default()
 	r := gin.Default()
 
 	// Read MongoDB host from environment variable
@@ -132,21 +181,22 @@ func main() {
 			return
 		}
 		if err = setValueInCache(shortURL, input.OriginalURL); err != nil {
-			logger.Info("Failed to store key in cache  %s\n", err)
+			logger.Info("Failed to store key in cache  %s\n", err.Error())
 		}
 
 		c.JSON(http.StatusOK, gin.H{"shortUrl": shortURL})
-
 	})
 
 	r.GET("/:shortID", func(c *gin.Context) {
 		shortID := c.Param("shortID")
 
-
 		var urlEntry URL
-
-		// Find URL in MongoDB
-		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+		var originalURL string
+		var isOk bool
+		if isOk, originalURL = getUrlFromCache(shortID); !isOk {
+			logger.Warn("Failed to get key " + shortID + " from cache. Request will be forwared to database\n")
+			// Find URL in MongoDB
+			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
 			err := urlCollection.FindOne(ctx, bson.M{"_id": shortID}).Decode(&urlEntry)
 
@@ -155,14 +205,13 @@ func main() {
 				return
 			}
 			originalURL = urlEntry.OriginalURL
-
 		}
 
-		c.Redirect(http.StatusTemporaryRedirect, urlEntry.OriginalURL)
+		c.Redirect(http.StatusTemporaryRedirect, originalURL)
 	})
 
 	// Run the server
-	if err := r.Run(":3001"); err != nil {
+	if err := r.Run(":3000"); err != nil {
 		slog.Info(err.Error())
 	}
 
