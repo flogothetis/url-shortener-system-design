@@ -30,7 +30,6 @@ type URL struct {
 
 var (
 	base58Alphabet    = []byte("123456789ABCDEFJKLMGHNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
-	cacheContainerURL = "http://cache-load-balancer/"
 )
 
 func base58Encode(input int64) string {
@@ -132,16 +131,8 @@ func main() {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to shorten URL"})
 			return
 		}
-
-		// Save to Cache
-
-		cacheData := map[string]string{"shortURL": shortURL, "originalURL": input.OriginalURL}
-		cacheBytes, _ := json.Marshal(cacheData)
-		cacheResponse, err := http.Post(cacheContainerURL+"set", "application/json", bytes.NewBuffer(cacheBytes))
-		logger.Debug("%v", cacheResponse)
-		if err != nil {
-			logger.Error("Failed to save to cache container: %v\n", err)
-			// Handle error
+		if err = setValueInCache(shortURL, input.OriginalURL); err != nil {
+			logger.Info("Failed to store key in cache  %s\n", err)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"shortUrl": shortURL})
@@ -151,26 +142,20 @@ func main() {
 	r.GET("/:shortID", func(c *gin.Context) {
 		shortID := c.Param("shortID")
 
-		resp, err := http.Get(cacheContainerURL + shortID)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			var cacheData map[string]string
-			err := json.NewDecoder(resp.Body).Decode(&cacheData)
-			if err == nil {
-				// Original URL found in cache
-				c.Redirect(http.StatusTemporaryRedirect, cacheData["originalURL"])
-				return
-			}
-		}
 
 		var urlEntry URL
 
 		// Find URL in MongoDB
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
-		err = urlCollection.FindOne(ctx, bson.M{"_id": shortID}).Decode(&urlEntry)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "URL not found"})
-			return
+			err := urlCollection.FindOne(ctx, bson.M{"_id": shortID}).Decode(&urlEntry)
+
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "URL not found in database"})
+				return
+			}
+			originalURL = urlEntry.OriginalURL
+
 		}
 
 		c.Redirect(http.StatusTemporaryRedirect, urlEntry.OriginalURL)

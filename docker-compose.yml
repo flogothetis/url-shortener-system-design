@@ -39,7 +39,7 @@ services:
       - "3001"
     depends_on:
       - mongodb
-      - cache-container
+      - memcached_http_server
     environment:
       - MONGO_HOST=mongodb://mongodb:27017/
     networks:
@@ -57,6 +57,8 @@ services:
       - ./short-url-load-balancer/nginx.conf:/etc/nginx/nginx.conf
     networks:
       - snowflake-net
+    depends_on:
+      - short-url-app
 
   mongodb:
     image: mongo
@@ -82,7 +84,7 @@ services:
   cache-load-balancer:
     image: nginx
     ports:
-      - "80"
+      - "7004:80"
     volumes:
       - ./cache-load-balancer/nginx.conf:/etc/nginx/nginx.conf
     networks:
