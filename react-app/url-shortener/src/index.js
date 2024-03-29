@@ -1,10 +1,13 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./index.css";
+import App from "./App";
+import reportWebVitals from "./reportWebVitals";
+const { EventEmitter } = require("events");
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+// Increase the maximum number of listeners for the TLSSocket event emitter
+EventEmitter.defaultMaxListeners = 15; // or any suitable value greater than 11
+const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
     <App />
