@@ -1,9 +1,13 @@
 from flask import Flask, request, jsonify
-import memcache
+import memcache, os
 
 app = Flask(__name__)
 
-cache = memcache.Client(['memcached:11211'], debug=0)
+# Retrieve port from environment variable or use default 8080
+PORT = int(os.environ.get('PORT', 8080))
+# Retrieve memcached server address from environment variable or use default 'memcached:11211'
+MEMCACHED_SERVER = os.environ.get('CACHE_SERVER', 'memcached:11211')
+cache = memcache.Client([MEMCACHED_SERVER], debug=0)
 
 @app.route('/', methods=['GET'])
 def get_value():
@@ -28,4 +32,4 @@ def set_value():
     return jsonify({"success": True})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=PORT)

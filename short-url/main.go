@@ -180,10 +180,6 @@ func main() {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to shorten URL"})
 			return
 		}
-		if err = setValueInCache(shortURL, input.OriginalURL); err != nil {
-			logger.Info("Failed to store key in cache  %s\n", err.Error())
-		}
-
 		c.JSON(http.StatusOK, gin.H{"shortUrl": shortURL})
 	})
 
@@ -205,6 +201,10 @@ func main() {
 				return
 			}
 			originalURL = urlEntry.OriginalURL
+			// In case of read and when entry does not exist in cache, the update LRU cache
+			if err = setValueInCache(shortID, originalURL); err != nil {
+				logger.Info("Failed to store key in cache  %s\n", err.Error())
+			}
 		}
 
 		c.Redirect(http.StatusTemporaryRedirect, originalURL)
