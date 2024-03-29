@@ -20,8 +20,6 @@ const LinkResult = ({ inputValue }) => {
       console.log("🚀 ~ fetchData ~ le:", le);
 
       setShortenLink(res.data.shortUrl);
-
-      
     } catch (err) {
       setError(err);
     } finally {
@@ -38,7 +36,14 @@ const LinkResult = ({ inputValue }) => {
   const redirectToShortenedLink = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`http://localhost:8080/${shortenLink}`);
+      const res = await axios.get(`http://localhost:8080/${shortenLink}`, {
+        mode: "no-cors",
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
 
       console.log(
         "🚀 ~ redirectToShortenedLink ~ res:",

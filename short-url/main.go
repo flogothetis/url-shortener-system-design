@@ -184,7 +184,7 @@ func main() {
 			return
 		}
 		if err = setValueInCache(shortURL, input.OriginalURL); err != nil {
-			logger.Info("Failed to store key in cache  %s\n", err.Error())
+			logger.Info("Failed to store key in cache  %s\n", err)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"shortUrl": shortURL})
