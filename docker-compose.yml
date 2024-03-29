@@ -112,13 +112,27 @@ services:
 
     # React Frontend Microservice
   react-app:
-    image: nginx
-    volumes:
-      - ./react-app/url-shortener/build:/usr/share/nginx/html
+    build:
+      context: ./react-app/url-shortener
+
     ports:
-      - "3000:80"  # Expose React app on port 3000
+      - "3000:3000"
+    stdin_open: true
+    tty: true
+
     networks:
       - snowflake-net
+
+  reverse-proxy-react:
+    image: nginx
+    ports:
+      - "80"
+    volumes:
+      - ./react-app/url-shortener/build:/usr/share/nginx/html
+    networks:
+      - snowflake-net
+    depends_on:
+      - react-app
 
 networks:
   snowflake-net:
