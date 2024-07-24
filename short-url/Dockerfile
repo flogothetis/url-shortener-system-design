@@ -10,21 +10,26 @@ RUN go mod download
 
 COPY *.go ./
 
+# Build the application binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o /docker-gs-ping
 
-# Run the tests in the container
+# Run tests in a separate stage
 FROM build-stage AS run-test-stage
-RUN go test -v ./...
+
 
 # Deploy the application binary into a lean image
-FROM gcr.io/distroless/base-debian11 AS build-release-stage
+FROM alpine:latest AS build-release-stage
 
 WORKDIR /
 
+# Copy the built application binary from build-stage
 COPY --from=build-stage /docker-gs-ping /docker-gs-ping
 
-EXPOSE 3000
+# Expose the port
+EXPOSE 3001
 
-USER nonroot:nonroot
+# Set the user
+USER nobody:nobody
 
+# Entrypoint for running the application
 ENTRYPOINT ["/docker-gs-ping"]

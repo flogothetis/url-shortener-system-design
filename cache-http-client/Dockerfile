@@ -1,11 +1,18 @@
-FROM python:3.7
+# Use the official Golang image from Docker Hub
+FROM golang:1.22
 
+# Set the working directory inside the container
 WORKDIR /app
 
-COPY requirements.txt .
+# Copy the go.mod and go.sum files to the container
+COPY go.mod go.sum ./
+RUN go mod download
 
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy all .go files to the container
+COPY *.go ./
 
-COPY . .
+# Build the Go application
+RUN go build -o app
 
-CMD ["python", "server.py"]
+# Command to run the executable
+CMD ["./app"]

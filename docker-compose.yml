@@ -1,6 +1,6 @@
 # docker-compose.yml
 
-version: '3'
+version: "3"
 
 services:
   id-generator-1:
@@ -8,8 +8,8 @@ services:
     environment:
       WORKER_ID: 1
       EPOCH: 1641052800000 #start date of timestamps
-    expose:
-      - 5000
+    ports:
+      - 5001
     networks:
       - snowflake-net
 
@@ -18,8 +18,8 @@ services:
     environment:
       WORKER_ID: 2
       EPOCH: 1641052800000 #start date of timestamps
-    expose:
-      - 5000
+    ports:
+      - 5001
     networks:
       - snowflake-net
 
@@ -32,15 +32,14 @@ services:
     networks:
       - snowflake-net
 
-
   short-url-app:
     build:
       context: ./short-url
-    expose:
-      - 3000
+    ports:
+      - "3001"
     depends_on:
       - mongodb
-      - memcached_http_server-load-balancer
+      - memcached
     environment:
       - MONGO_HOST=mongodb://mongodb:27017/
     networks:
@@ -58,11 +57,10 @@ services:
       - ./short-url-load-balancer/nginx.conf:/etc/nginx/nginx.conf
     networks:
       - snowflake-net
-  
 
   mongodb:
     image: mongo
-    container_name: 'mongodb'
+    container_name: "mongodb"
     restart: always
     expose:
       - 27017
@@ -84,37 +82,57 @@ services:
   memcached:
     image: memcached:latest
     container_name: memcached
-    expose:
-      - 11211
+    ports:
+      - "11211:11211"
     networks:
       - snowflake-net
 
   memcached_http_server:
     build:
       context: ./cache-http-client
+    ports:
+      - "8080"
     depends_on:
       - memcached
     networks:
       - snowflake-net
-    expose:
-      - 8080
-    environment:
-      - PORT=8080
-      - CACHE_SERVER=memcached:11211
     deploy:
       replicas: 3
 
   memcached_http_server-load-balancer:
     image: nginx
-    expose:
-      - 80
+    ports:
+      - "7004:80"
     volumes:
       - ./cache-http-client-load-balancer/nginx.conf:/etc/nginx/nginx.conf
     networks:
       - snowflake-net
     depends_on:
       - memcached_http_server
- 
+
+    # React Frontend Microservice
+  react-app:
+    build:
+      context: ./react-app/url-shortener
+
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    tty: true
+
+    networks:
+      - snowflake-net
+
+  reverse-proxy-react:
+    image: nginx
+    ports:
+      - "80"
+    volumes:
+      - ./react-app/url-shortener/build:/usr/share/nginx/html
+    networks:
+      - snowflake-net
+    depends_on:
+      - react-app
 
 networks:
   snowflake-net:
